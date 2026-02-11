@@ -43,6 +43,16 @@ def make_cameras_from_configs(camera_configs: dict[str, CameraConfig]) -> dict[s
 
             cameras[key] = Reachy2Camera(cfg)
 
+        elif cfg.type == "orbbec_color":
+            from .orbbec.camera_orbbec import OrbbecColorCamera
+
+            cameras[key] = OrbbecColorCamera(cfg)
+
+        elif cfg.type == "orbbec_depth":
+            from .orbbec.camera_orbbec import OrbbecDepthCamera
+
+            cameras[key] = OrbbecDepthCamera(cfg)
+
         else:
             try:
                 cameras[key] = cast(Camera, make_device_from_device_class(cfg))
