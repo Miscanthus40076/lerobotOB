@@ -28,6 +28,7 @@ from numpy.typing import NDArray  # type: ignore  # TODO: add type stubs for num
 try:
     import pyrealsense2 as rs  # type: ignore  # TODO: add type stubs for pyrealsense2
 except Exception as e:
+    rs = None
     logging.info(f"Could not import realsense: {e}")
 
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -38,6 +39,14 @@ from ..utils import get_cv2_rotation
 from .configuration_realsense import RealSenseCameraConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _require_realsense() -> Any:
+    if rs is None:
+        raise ImportError(
+            "pyrealsense2 is required for RealSense cameras. Install `lerobot[intelrealsense]`."
+        )
+    return rs
 
 
 class RealSenseCamera(Camera):
@@ -167,8 +176,10 @@ class RealSenseCamera(Camera):
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
 
-        self.rs_pipeline = rs.pipeline()
-        rs_config = rs.config()
+        rs_module = _require_realsense()
+
+        self.rs_pipeline = rs_module.pipeline()
+        rs_config = rs_module.config()
         self._configure_rs_pipeline_config(rs_config)
 
         try:
@@ -186,10 +197,24 @@ class RealSenseCamera(Camera):
             time.sleep(
                 1
             )  # NOTE(Steven): RS cameras need a bit of time to warm up before the first read. If we don't wait, the first read from the warmup will raise.
-            start_time = time.time()
-            while time.time() - start_time < self.warmup_s:
-                self.read()
-                time.sleep(0.1)
+            deadline = time.time() + self.warmup_s
+            got_frame = False
+            last_error: Exception | None = None
+            while time.time() < deadline:
+                try:
+                    frame = self.read(timeout_ms=500)
+                    if frame is not None:
+                        got_frame = True
+                        break
+                except Exception as e:
+                    last_error = e
+                time.sleep(0.05)
+
+            if not got_frame and self.warmup_s > 0:
+                if last_error is not None:
+                    logger.warning("Warmup timed out for %s. Last error: %s", self, last_error)
+                else:
+                    logger.warning("Warmup timed out for %s.", self)
 
         logger.info(f"{self} connected.")
 
@@ -207,20 +232,21 @@ class RealSenseCamera(Camera):
             OSError: If pyrealsense2 is not installed.
             ImportError: If pyrealsense2 is not installed.
         """
+        rs_module = _require_realsense()
         found_cameras_info = []
-        context = rs.context()
+        context = rs_module.context()
         devices = context.query_devices()
 
         for device in devices:
             camera_info = {
-                "name": device.get_info(rs.camera_info.name),
+                "name": device.get_info(rs_module.camera_info.name),
                 "type": "RealSense",
-                "id": device.get_info(rs.camera_info.serial_number),
-                "firmware_version": device.get_info(rs.camera_info.firmware_version),
-                "usb_type_descriptor": device.get_info(rs.camera_info.usb_type_descriptor),
-                "physical_port": device.get_info(rs.camera_info.physical_port),
-                "product_id": device.get_info(rs.camera_info.product_id),
-                "product_line": device.get_info(rs.camera_info.product_line),
+                "id": device.get_info(rs_module.camera_info.serial_number),
+                "firmware_version": device.get_info(rs_module.camera_info.firmware_version),
+                "usb_type_descriptor": device.get_info(rs_module.camera_info.usb_type_descriptor),
+                "physical_port": device.get_info(rs_module.camera_info.physical_port),
+                "product_id": device.get_info(rs_module.camera_info.product_id),
+                "product_line": device.get_info(rs_module.camera_info.product_line),
             }
 
             # Get stream profiles for each sensor
@@ -256,31 +282,40 @@ class RealSenseCamera(Camera):
             )
 
         if len(found_devices) > 1:
-            serial_numbers = [dev["serial_number"] for dev in found_devices]
+            serial_numbers = [str(dev["id"]) for dev in found_devices]
             raise ValueError(
                 f"Multiple RealSense cameras found with name '{name}'. "
                 f"Please use a unique serial number instead. Found SNs: {serial_numbers}"
             )
 
-        serial_number = str(found_devices[0]["serial_number"])
+        serial_number = str(found_devices[0]["id"])
         return serial_number
 
     def _configure_rs_pipeline_config(self, rs_config: Any) -> None:
         """Creates and configures the RealSense pipeline configuration object."""
-        rs.config.enable_device(rs_config, self.serial_number)
+        rs_module = _require_realsense()
+        rs_module.config.enable_device(rs_config, self.serial_number)
 
         if self.width and self.height and self.fps:
             rs_config.enable_stream(
-                rs.stream.color, self.capture_width, self.capture_height, rs.format.rgb8, self.fps
+                rs_module.stream.color,
+                self.capture_width,
+                self.capture_height,
+                rs_module.format.rgb8,
+                self.fps,
             )
             if self.use_depth:
                 rs_config.enable_stream(
-                    rs.stream.depth, self.capture_width, self.capture_height, rs.format.z16, self.fps
+                    rs_module.stream.depth,
+                    self.capture_width,
+                    self.capture_height,
+                    rs_module.format.z16,
+                    self.fps,
                 )
         else:
-            rs_config.enable_stream(rs.stream.color)
+            rs_config.enable_stream(rs_module.stream.color)
             if self.use_depth:
-                rs_config.enable_stream(rs.stream.depth)
+                rs_config.enable_stream(rs_module.stream.depth)
 
     def _configure_capture_settings(self) -> None:
         """Sets fps, width, and height from device stream if not already configured.
@@ -297,7 +332,8 @@ class RealSenseCamera(Camera):
         if self.rs_profile is None:
             raise RuntimeError(f"{self}: rs_profile must be initialized before use.")
 
-        stream = self.rs_profile.get_stream(rs.stream.color).as_video_stream_profile()
+        rs_module = _require_realsense()
+        stream = self.rs_profile.get_stream(rs_module.stream.color).as_video_stream_profile()
 
         if self.fps is None:
             self.fps = stream.fps()

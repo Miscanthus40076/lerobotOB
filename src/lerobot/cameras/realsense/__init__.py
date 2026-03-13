@@ -13,4 +13,11 @@
 # limitations under the License.
 
 from .camera_realsense import RealSenseCamera
+from .camera_rs_d405 import RealSenseD405ColorCamera, RealSenseD405DepthCamera
+from .camera_rs_d435i import RealSenseD435iColorCamera, RealSenseD435iDepthCamera
 from .configuration_realsense import RealSenseCameraConfig
+from .configuration_rs_d405 import RealSenseD405ColorCameraConfig, RealSenseD405DepthCameraConfig
+from .configuration_rs_d435i import (
+    RealSenseD435iColorCameraConfig,
+    RealSenseD435iDepthCameraConfig,
+)

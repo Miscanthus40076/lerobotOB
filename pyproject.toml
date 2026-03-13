@@ -68,7 +68,7 @@ dependencies = [
     "setuptools>=71.0.0,<81.0.0",
     "cmake>=3.29.0.1,<4.2.0",
     "einops>=0.8.0,<0.9.0",
-    "opencv-python-headless>=4.9.0,<4.13.0",
+    "opencv-python>=4.9.0,<4.13.0",
     "av>=15.0.0,<16.0.0",
     "jsonlines>=4.0.0,<5.0.0",
     "packaging>=24.2,<26.0",
@@ -113,7 +113,7 @@ unitree_g1 = [
 ]
 reachy2 = ["reachy2_sdk>=1.0.14,<1.1.0"]
 kinematics = ["lerobot[placo-dep]"]
-intelrealsense = [
+realsense = [
     "pyrealsense2>=2.55.1.6486,<2.57.0 ; sys_platform != 'darwin'",
     "pyrealsense2-macosx>=2.54,<2.55.0 ; sys_platform == 'darwin'",
 ]
@@ -157,7 +157,7 @@ all = [
     "lerobot[lekiwi]",
     "lerobot[reachy2]",
     "lerobot[kinematics]",
-    "lerobot[intelrealsense]",
+    "lerobot[realsense]",
     "lerobot[pi]",
     "lerobot[smolvla]",
     # "lerobot[groot]", TODO(Steven): Gr00t requires specific installation instructions for flash-attn

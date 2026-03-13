@@ -48,6 +48,14 @@ import torch
 
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.realsense.configuration_rs_d435i import (  # noqa: F401
+    RealSenseD435iColorCameraConfig,
+    RealSenseD435iDepthCameraConfig,
+)
+from lerobot.cameras.realsense.configuration_rs_d405 import (  # noqa: F401
+    RealSenseD405ColorCameraConfig,
+    RealSenseD405DepthCameraConfig,
+)
 from lerobot.robots import (  # noqa: F401
     Robot,
     RobotConfig,
@@ -396,6 +404,7 @@ class RobotClient:
 
             raw_observation: RawObservation = self.robot.get_observation()
             raw_observation["task"] = task
+            self.logger.info(f"Raw observation keys: {sorted(raw_observation.keys())}")
 
             with self.latest_action_lock:
                 latest_action = self.latest_action

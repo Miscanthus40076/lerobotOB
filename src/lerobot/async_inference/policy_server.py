@@ -226,6 +226,8 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
             self.logger.info(
                 f"Running inference for observation #{obs.get_timestep()} (must_go: {obs.must_go})"
             )
+            self.logger.info(f"Policy image feature keys: {sorted(self.policy_image_features.keys())}")
+            self.logger.info(f"Incoming raw observation keys: {sorted(obs.get_observation().keys())}")
 
             with self._predicted_timesteps_lock:
                 self._predicted_timesteps.add(obs.get_timestep())

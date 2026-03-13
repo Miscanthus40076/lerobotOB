@@ -43,6 +43,9 @@ class OpenCVCameraConfig(CameraConfig):
     Attributes:
         index_or_path: Either an integer representing the camera device index,
                       or a Path object pointing to a video file.
+        copy: Copy frames from another declared OpenCV camera instead of opening
+              a second physical device. `False` disables copying, an integer `n`
+              maps to `camera{n}`, and a string can directly name the source key.
         fps: Requested frames per second for the color stream.
         width: Requested frame width in pixels for the color stream.
         height: Requested frame height in pixels for the color stream.
@@ -58,12 +61,25 @@ class OpenCVCameraConfig(CameraConfig):
     """
 
     index_or_path: int | Path
+    copy: bool | int | str = False
     color_mode: ColorMode = ColorMode.RGB
     rotation: Cv2Rotation = Cv2Rotation.NO_ROTATION
     warmup_s: int = 1
     fourcc: str | None = None
 
     def __post_init__(self) -> None:
+        if isinstance(self.copy, bool):
+            if self.copy:
+                raise ValueError("`copy=True` is ambiguous. Use `copy: 2` or `copy: camera2` instead.")
+        elif isinstance(self.copy, int):
+            if self.copy < 1:
+                raise ValueError(f"`copy` must be >= 1 when provided as an integer, but {self.copy} is provided.")
+        elif isinstance(self.copy, str):
+            if not self.copy.strip():
+                raise ValueError("`copy` must not be empty when provided as a string.")
+        else:
+            raise ValueError(f"`copy` must be False, an integer, or a string, but {self.copy!r} is provided.")
+
         if self.color_mode not in (ColorMode.RGB, ColorMode.BGR):
             raise ValueError(
                 f"`color_mode` is expected to be {ColorMode.RGB.value} or {ColorMode.BGR.value}, but {self.color_mode} is provided."

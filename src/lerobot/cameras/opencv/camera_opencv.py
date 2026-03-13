@@ -101,7 +101,12 @@ class OpenCVCamera(Camera):
         ```
     """
 
-    def __init__(self, config: OpenCVCameraConfig):
+    def __init__(
+        self,
+        config: OpenCVCameraConfig,
+        source_camera: "OpenCVCamera | None" = None,
+        source_key: str | None = None,
+    ):
         """
         Initializes the OpenCVCamera instance.
 
@@ -112,6 +117,10 @@ class OpenCVCamera(Camera):
 
         self.config = config
         self.index_or_path = config.index_or_path
+        self.source_camera = source_camera
+        self.source_key = source_key
+        self.copy = config.copy
+        self._copy_connected = False
 
         self.fps = config.fps
         self.color_mode = config.color_mode
@@ -133,12 +142,40 @@ class OpenCVCamera(Camera):
             if self.rotation in [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE]:
                 self.capture_width, self.capture_height = self.height, self.width
 
+    def _validate_copy_configuration(self) -> None:
+        if self.source_camera is None:
+            raise ValueError(f"{self} copy source is not configured.")
+
+        config_mismatches = []
+        if self.width != self.source_camera.width:
+            config_mismatches.append(f"width={self.width} != {self.source_camera.width}")
+        if self.height != self.source_camera.height:
+            config_mismatches.append(f"height={self.height} != {self.source_camera.height}")
+        if self.color_mode != self.source_camera.color_mode:
+            config_mismatches.append(f"color_mode={self.color_mode} != {self.source_camera.color_mode}")
+        if self.rotation != self.source_camera.rotation:
+            config_mismatches.append(f"rotation={self.rotation} != {self.source_camera.rotation}")
+
+        if config_mismatches:
+            raise ValueError(
+                f"{self} copy configuration must match source camera {self.source_key}: "
+                + ", ".join(config_mismatches)
+            )
+
     def __str__(self) -> str:
+        if self.is_copy_camera and self.source_key is not None:
+            return f"{self.__class__.__name__}(copy:{self.source_key})"
         return f"{self.__class__.__name__}({self.index_or_path})"
+
+    @property
+    def is_copy_camera(self) -> bool:
+        return self.source_camera is not None
 
     @property
     def is_connected(self) -> bool:
         """Checks if the camera is currently connected and opened."""
+        if self.is_copy_camera:
+            return self._copy_connected
         return isinstance(self.videocapture, cv2.VideoCapture) and self.videocapture.isOpened()
 
     def connect(self, warmup: bool = True) -> None:
@@ -155,6 +192,14 @@ class OpenCVCamera(Camera):
         """
         if self.is_connected:
             raise DeviceAlreadyConnectedError(f"{self} is already connected.")
+
+        if self.is_copy_camera:
+            self._validate_copy_configuration()
+            if self.source_camera is None or not self.source_camera.is_connected:
+                raise ConnectionError(f"{self} requires source camera {self.source_key} to be connected first.")
+            self._copy_connected = True
+            logger.info(f"{self} connected.")
+            return
 
         # Use 1 thread for OpenCV operations to avoid potential conflicts or
         # blocking in multi-threaded applications, especially during data collection.
@@ -362,6 +407,9 @@ class OpenCVCamera(Camera):
                           received frame dimensions don't match expectations before rotation.
             ValueError: If an invalid `color_mode` is requested.
         """
+        if self.is_copy_camera:
+            return self._read_from_source(timeout_ms=max(self.warmup_s * 1000, 200), color_mode=color_mode)
+
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
@@ -381,6 +429,19 @@ class OpenCVCamera(Camera):
         logger.debug(f"{self} read took: {read_duration_ms:.1f}ms")
 
         return processed_frame
+
+    def _read_from_source(self, timeout_ms: float, color_mode: ColorMode | None = None) -> NDArray[Any]:
+        if not self.is_connected or self.source_camera is None or not self.source_camera.is_connected:
+            raise DeviceNotConnectedError(f"{self} is not connected.")
+
+        if color_mode is not None and color_mode != self.color_mode:
+            raise ValueError(
+                f"{self} cannot override color_mode while copying from {self.source_key}. "
+                "Match the copy camera config to the source camera config instead."
+            )
+
+        frame = self.source_camera.async_read(timeout_ms=timeout_ms)
+        return frame.copy()
 
     def _postprocess_image(self, image: NDArray[Any], color_mode: ColorMode | None = None) -> NDArray[Any]:
         """
@@ -496,6 +557,9 @@ class OpenCVCamera(Camera):
             TimeoutError: If no frame becomes available within the specified timeout.
             RuntimeError: If an unexpected error occurs.
         """
+        if self.is_copy_camera:
+            return self._read_from_source(timeout_ms=timeout_ms)
+
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
@@ -528,6 +592,13 @@ class OpenCVCamera(Camera):
         Raises:
             DeviceNotConnectedError: If the camera is already disconnected.
         """
+        if self.is_copy_camera:
+            if not self._copy_connected:
+                raise DeviceNotConnectedError(f"{self} not connected.")
+            self._copy_connected = False
+            logger.info(f"{self} disconnected.")
+            return
+
         if not self.is_connected and self.thread is None:
             raise DeviceNotConnectedError(f"{self} not connected.")
 

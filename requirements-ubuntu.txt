@@ -408,7 +408,7 @@ numpy==2.2.6
     #   mujoco
     #   numba
     #   opencv-python
-    #   opencv-python-headless
+    #   opencv-python
     #   pandas
     #   peft
     #   pyquaternion
@@ -468,11 +468,10 @@ omegaconf==2.3.0
 opencv-python==4.12.0.88
     # via
     #   gym-pusht
+    #   lerobot
     #   libero
     #   reachy2-sdk
     #   robosuite
-opencv-python-headless==4.12.0.88
-    # via lerobot
 orderly-set==5.5.0
     # via deepdiff
 packaging==25.0
